@@ -1,0 +1,106 @@
+body {
+    background-color: #f5f7fa;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #2d3436;
+    min-height: 100vh;
+}
+
+.container {
+    background: #ffffff;
+    padding: 2rem;
+    border-radius: 15px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    margin-top: 3rem;
+    margin-bottom: 3rem;
+}
+
+.dashboard-card {
+    background: #f8f9fa;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+}
+
+.certificate-card {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e9ecef;
+    height: 100%;
+}
+
+.certificate-img {
+    width: 100%;
+    max-width: 300px;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s ease;
+    margin: 0 auto;
+    display: block;
+}
+
+.certificate-img:hover {
+    transform: scale(1.03);
+}
+
+.credits-display .badge {
+    padding: 0.8rem 1.2rem;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.form-control-lg {
+    padding: 1rem 1.25rem;
+    border-radius: 8px;
+    border: 2px solid #dee2e6;
+}
+
+.btn-lg {
+    padding: 0.8rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+.fade-in {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.8s ease forwards;
+  }
+
+.fade-in-left {
+    animation-delay: 0.2s;
+  }
+
+.fade-in-right {
+    animation-delay: 0.5s;
+  }
+
+@keyframes fadeInUp {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+@media (max-width: 768px) {
+    .container {
+        margin-top: 1.5rem;
+        padding: 1.5rem;
+    }
+
+    .certificate-card {
+        margin-top: 2rem;
+    }
+}
+
+.certificate-img {
+    border: 15px solid #f5e6d3;
+    box-shadow: 0 0 25px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+    transform: rotate(-2deg);
+    background: #f5e6d3;
+}
+
+.certificate-img:hover {
+    transform: rotate(-1deg) scale(1.03);
+    box-shadow: 0 0 35px rgba(0,0,0,0.2);
+}

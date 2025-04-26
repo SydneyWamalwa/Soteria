@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soteria Dashboard</title>
+    <!-- Load Bootstrap CSS first -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Then load your custom CSS using url_for -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  <div class="container fade-in">
+    <div class="row">
+      <div class="col-md-8 fade-in fade-in-left">
+        <h2>Welcome, {{ user.name }}!</h2>
+        <p>Planet Credits: {{ user.planet_credits }}</p>
+        <form method="POST" action="{{ url_for('log_action') }}">
+          {{ form.hidden_tag() }}
+          <div class="form-group">
+            {{ form.description.label }}
+            {{ form.description(class="form-control") }}
+          </div>
+          <div class="form-group">
+            {{ form.points.label }}
+            {{ form.points(class="form-control") }}
+          </div>
+          <button type="submit" class="btn btn-success mt-2">Log Eco-Action</button>
+        </form>
+      </div>
+
+      <div class="col-md-4 text-center fade-in fade-in-right">
+        <h4>Your Certificate</h4>
+        {% if user.certificate_path %}
+          <img src="{{ url_for('static', filename='certificates/' + user.certificate_path) }}"
+               alt="Certificate"
+               style="width: 100%; max-width: 300px; height: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border-radius: 10px;">
+          <a href="{{ url_for('certificate') }}" class="btn btn-primary mt-3">View Full Certificate</a>
+        {% else %}
+          <p>No certificate yet. <a href="{{ url_for('apply_citizenship') }}">Apply Now</a></p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
