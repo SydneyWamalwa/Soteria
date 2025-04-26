@@ -1,12 +1,41 @@
-from flask import Flask, render_template, redirect, url_for, flash, session
+from flask import Flask, render_template, redirect, url_for, flash, session, request
 from config import Config
-from models import db, User, EcoAction
+from models import db, User, EcoAction, EcoActionReview
 from PIL import Image, ImageDraw, ImageFont
 from forms import RegistrationForm, EcoActionForm, LoginForm
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_user,
+    logout_user,
+    login_required
+)
+from sqlalchemy import exists
+from sqlalchemy.orm import aliased
+from sqlalchemy.sql import exists
+from datetime import datetime
+from werkzeug.utils import secure_filename
 
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg', 'png', 'gif'}
+
+
+# Initialize LoginManager
+login_manager = LoginManager()
+login_manager.login_view = 'login'
+
+# Utility function to check allowed file extensions
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+def get_current_user():
+    return current_user
 
 # Tier assignment based on Planet Credits
 
@@ -194,146 +223,211 @@ def generate_certificate(user):
         print(f"Error generating certificate: {e}")
         return None
 
-def login_required(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_id' not in session:
-                flash('Please log in to access this page.', 'warning')
-                return redirect(url_for('login'))
-            return f(*args, **kwargs)
-        return decorated_function
-
 # Create Flask app
 
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
-    db.init_app(app)
 
+    # Initialize extensions
+    db.init_app(app)
+    login_manager.init_app(app)
+
+    # Routes
     @app.route('/')
     @login_required
     def index():
         return render_template('index.html')
+
     @app.route('/login', methods=['GET', 'POST'])
     def login():
         form = LoginForm()
-
         if form.validate_on_submit():
             user = User.query.filter_by(email=form.email.data).first()
             if user and check_password_hash(user.password, form.password.data):
-                session['user_id'] = user.id
+                login_user(user)  # Now properly imported
                 flash('Logged in successfully!', 'success')
-                return redirect(url_for('info'))
+                next_page = request.args.get('next')
+                return redirect(next_page) if next_page else redirect(url_for('dashboard'))
             else:
                 flash('Invalid email or password.', 'danger')
-                return redirect(url_for('login'))
-
         return render_template('login.html', form=form)
 
+    @app.route('/logout')
+    @login_required
+    def logout():
+        logout_user()  # Don't forget to import this too
+        return redirect(url_for('login'))
 
     @app.route('/register', methods=['GET', 'POST'])
     def register():
         form = RegistrationForm()
-
         if form.validate_on_submit():
-            existing_user = User.query.filter_by(email=form.email.data).first()
-            if existing_user:
-                flash('Email already registered. Please login or use a different email.', 'danger')
+            if User.query.filter_by(email=form.email.data).first():
+                flash('Email already registered', 'danger')
                 return redirect(url_for('register'))
 
-            hashed_password = generate_password_hash(form.password.data)
-            user = User(name=form.name.data, email=form.email.data, password=hashed_password)
+            user = User(
+                name=form.name.data,
+                email=form.email.data,
+                password=generate_password_hash(form.password.data)
+            )
             db.session.add(user)
             db.session.commit()
-            flash('Registered successfully!', 'success')
-            session['user_id'] = user.id
-            return redirect(url_for('info'))
-
+            login_user(user)
+            return redirect(url_for('dashboard'))
         return render_template('register.html', form=form)
 
-
-
-    @app.route('/info')
-    def info():
-        return render_template('info.html')
-
-    # Open citizenship application for all registered users
-    @app.route('/apply', methods=['GET', 'POST'])
-    def apply_citizenship():
-        if 'user_id' not in session:
-            return redirect(url_for('register'))
-
-        user = User.query.get(session['user_id'])
-        if user is None:
-            flash('User not found. Please register again.', 'danger')
-            return redirect(url_for('register'))
-
-        # Rest of your logic
-        user.is_citizen = True
-        user.soteria_id = f"SOT-{user.id:04d}"
-        user.position = 'Steward & Founding Architect of Soteria' if user.email == 'sydneywamalwa@gmail.com' else assign_tier(user)
-        user.image_url = url_for('static', filename='images/Sydney.jpg')
-        generate_certificate(user)
-        db.session.commit()
-        flash('Congratulations! You are now a citizen of Soteria.', 'success')
-        return redirect(url_for('certificate'))
-
-
     @app.route('/dashboard')
+    @login_required
     def dashboard():
-        if 'user_id' not in session:
-            return redirect(url_for('register'))
-        user = User.query.get(session['user_id'])
-        form = EcoActionForm()
-        return render_template('dashboard.html', user=user, form=form)
+        return render_template('dashboard.html', user=current_user, form=EcoActionForm())
 
     @app.route('/log', methods=['POST'])
+    @login_required
     def log_action():
-        if 'user_id' not in session:
-            return redirect(url_for('register'))
-        user = User.query.get(session['user_id'])
         form = EcoActionForm()
+
         if form.validate_on_submit():
-            action = EcoAction(description=form.description.data, points=form.points.data, user=user)
-            user.planet_credits += form.points.data
-            db.session.add(action)
-            db.session.commit()
-            flash('Eco-action recorded!', 'success')
+            try:
+                # Handle file upload for proof photo if present
+                proof_photo = None
+                if 'proof_photo' in request.files:
+                    file = request.files['proof_photo']
+                    if file and allowed_file(file.filename):
+                        filename = secure_filename(file.filename)
+                        proof_photo = os.path.join('static/uploads', filename)
+                        file.save(proof_photo)
+
+                # Geo-location data (if provided) from the form
+                geo_location = form.geo_location.data if form.geo_location.data else None
+
+                # Create the EcoAction object
+                action = EcoAction(
+                    description=form.description.data,
+                    points=form.points.data,
+                    user_id=current_user.id,
+                    proof_photo=proof_photo,
+                    geo_location=geo_location
+                )
+
+                # Update the user's planet credits
+                current_user.planet_credits += form.points.data
+
+                # Commit the transaction
+                db.session.add(action)
+                db.session.commit()
+
+                flash('Eco-action recorded successfully!', 'success')
+            except Exception as e:
+                # Rollback if something goes wrong
+                db.session.rollback()
+                flash(f'Error: {str(e)}. Please try again later.', 'danger')
+                app.logger.error(f"Error logging eco-action: {str(e)}")
+
         else:
-            flash('Invalid input', 'danger')
+            flash('Invalid input. Please check your form data.', 'danger')
+
         return redirect(url_for('dashboard'))
 
-    @app.route('/certificate')
-    def certificate():
-        if 'user_id' not in session:
-            return redirect(url_for('register'))
+    @app.route('/apply', methods=['GET', 'POST'])
+    @login_required
+    def apply_citizenship():
+        if current_user.is_citizen:
+            return redirect(url_for('certificate'))
 
-        user = User.query.get(session['user_id'])
-        if not user.is_citizen:
+        current_user.is_citizen = True
+        current_user.soteria_id = f"SOT-{current_user.id:04d}"
+        current_user.position = 'Steward & Founding Architect of Soteria' \
+            if current_user.email == 'sydneywamalwa@gmail.com' else assign_tier(current_user)
+
+        generate_certificate(current_user)
+        db.session.commit()
+        flash('Citizenship granted!', 'success')
+        return redirect(url_for('certificate'))
+
+    @app.route('/certificate')
+    @login_required
+    def certificate():
+        if not current_user.is_citizen:
+            flash('Complete citizenship application first', 'warning')
             return redirect(url_for('apply_citizenship'))
 
-        # Generate or get existing certificate
-        if not user.certificate_path or not os.path.exists(f'static/{user.certificate_path}'):
-            cert_path = generate_certificate(user)
-        else:
-            cert_path = user.certificate_path
+        cert_path = current_user.certificate_path
+        if not cert_path or not os.path.exists(f'static/{cert_path}'):
+            cert_path = generate_certificate(current_user)
 
-        if not cert_path:
-            flash('Error generating certificate', 'danger')
-            return redirect(url_for('dashboard'))
-
-        details = position_details.get(user.position, position_details['Citizen'])
+        details = position_details.get(current_user.position, position_details['Citizen'])
         return render_template('certificate.html',
-                            user=user,
+                            user=current_user,
                             details=details,
                             cert_path=cert_path)
 
+    @app.route('/review_actions')
+    @login_required
+    def review_actions():
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
 
+        # Query for actions needing review
+        reviewed_subquery = exists().where(
+            EcoActionReview.eco_action_id == EcoAction.id,
+            EcoActionReview.reviewer_id == current_user.id
+        )
+
+        actions = EcoAction.query.filter(
+            EcoAction.status == 'Pending',
+            ~reviewed_subquery
+        ).paginate(page=page, per_page=per_page, error_out=False)
+
+        return render_template('review_actions.html',
+                            actions=actions.items,
+                            pagination=actions)
+
+    @app.route('/review/<int:action_id>/<decision>')
+    @login_required
+    def review_action(action_id, decision):
+        action = EcoAction.query.get_or_404(action_id)
+
+        if action.status != 'Pending' or current_user in action.reviewers:
+            flash('Invalid review action', 'danger')
+            return redirect(url_for('review_actions'))
+
+        # Create review record
+        review = EcoActionReview(
+            eco_action_id=action_id,
+            reviewer_id=current_user.id,
+            decision=decision
+        )
+        db.session.add(review)
+
+        # Update counts
+        action.reviewer_count += 1
+        if decision == 'approve':
+            action.approved_count += 1
+        else:
+            action.rejected_count += 1
+
+        # Check consensus
+        if action.reviewer_count >= 3:
+            action.status = 'Approved' if action.approved_count >= 2 else 'Rejected'
+            if action.status == 'Approved':
+                action.user.planet_credits += action.points
+
+        db.session.commit()
+        return redirect(url_for('review_actions'))
+
+    @app.route("/info")
+    def info():
+        return render_template("info.html")
+
+    # Database initialization
     with app.app_context():
         db.create_all()
-    return app
 
+    return app
 
 if __name__ == '__main__':
     app = create_app()
     app.run(debug=True)
+

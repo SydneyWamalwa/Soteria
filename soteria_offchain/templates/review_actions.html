@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block content %}
+<h1>Review Eco Actions</h1>
+{% for action in actions %}
+    <div class="card my-3">
+        <div class="card-body">
+            <h5 class="card-title">{{ action.description }}</h5>
+            <p class="card-text">Points: {{ action.points }}</p>
+            <a href="{{ url_for('review_action', action_id=action.id, decision='approve') }}" class="btn btn-success">Approve</a>
+            <a href="{{ url_for('review_action', action_id=action.id, decision='reject') }}" class="btn btn-danger">Reject</a>
+        </div>
+    </div>
+{% else %}
+    <p>No actions to review!</p>
+{% endfor %}
+<div class="pagination">
+    {% if pagination.has_prev %}
+      <a href="{{ url_for('review_actions', page=pagination.prev_num) }}">Previous</a>
+    {% endif %}
+
+    <span>Page {{ pagination.page }} of {{ pagination.pages }}</span>
+
+    {% if pagination.has_next %}
+      <a href="{{ url_for('review_actions', page=pagination.next_num) }}">Next</a>
+    {% endif %}
+  </div>
+{% endblock %}
+

@@ -1,3 +1,9 @@
 body { background: #f8f9fa; }
 .navbar { margin-bottom: 20px; }
 .card { margin-top: 20px; }
+.navbar-brand img {
+    width: 50px;  /* Adjust size */
+    height: 50px; /* Adjust size */
+    border-radius: 50%; /* Makes it round */
+    object-fit: cover; /* Ensures proper fit */
+}
